@@ -37,7 +37,8 @@ newEqClass (Variable n) = (EqClass n)
 data Statement =  Nop
                 | Var Identifier Statement
                 | VarBind Identifier Identifier
-                | ValBind Identifier Value 
+                | ValBind Identifier Value
+                | Conditional Identifier Statement Statement
                 | Statement [Statement]
                 deriving(Eq,Show)
 
@@ -178,6 +179,10 @@ freeIdentifiers (VarBind i j) env =
         listJ = if idIsAbsent env j then [j] else []
     in listI ++ listJ
 freeIdentifiers (ValBind i _) env = if idIsAbsent env i then [i] else []
+freeIdentifiers (Conditional i s1 s2) env = 
+    let allFree = (freeIdentifiers s1 env) ++ (freeIdentifiers s2 env)
+        isIFree = idIsAbsent env i
+    in allFree \\ if isIFree then [] else [i]
 freeIdentifiers (Statement s) env = foldl (\all s -> freeIdentifiers s env ++ all) [] s
 
 
@@ -192,6 +197,10 @@ convertToStore (Proc parameters stmt) env =
         externalIds = allIds \\ parameters
     in (ProcStore parameters stmt (restrictEnv env externalIds))
 
+valueOf :: Identifier -> Environment -> SAS -> Value
+valueOf i env store = 
+    let maybeVal = Map.lookup (varInEnv env i) (bound store)
+    in case maybeVal of (Just v) -> v
 
 emptyEnv = Environment Map.empty
 
@@ -202,7 +211,7 @@ data SStack = SStack {execStack :: [(Statement,Environment)]}
 instance Show SStack where
     show (SStack ses) = 
         let endWithNL = map ((++ "\n") . show) ses
-        in foldl (++) "" endWithNL 
+        in foldl (++) "" endWithNL
 
 pop :: SStack -> SStack
 pop (SStack s) =  SStack (tail s)

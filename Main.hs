@@ -1,4 +1,5 @@
 import DataTypes
+import qualified Data.Map as Map
 
 data ExecutionContext = EC {currStack :: SStack, currSAS :: SAS}
 
@@ -34,6 +35,14 @@ runC stack store steps =
                                 (Proc prms s) -> runC (pop stack) (bindVarVal store var val) (steps - 1)
                                                  where var = varInEnv env i
                                                        val = convertToStore (Proc prms s) env
+       (Conditional i s1 s2) -> if (idIsAbsent env i)
+                                then error "ID not in scope" else
+                                if (Map.member (varInEnv env i) (unbound store)) then error "ID not bound to a value" else
+                                if isLiteral (valueOf i env store) == False then error "ID refers to a non literal value" else
+                                case (valueOf i env store) of (Literal 0) -> runC newStack store (steps - 1)
+                                                                             where newStack = push (s2,env) (pop stack)
+                                                              (Literal _) -> runC newStack store (steps - 1)
+                                                                             where newStack = push (s1,env) (pop stack)
        (Statement s) -> runC newStack store (steps - 1)
                         where newStack = (foldr (\p pes -> push (p,env) pes) (pop stack) s)
 
@@ -86,3 +95,11 @@ p17 = Var x (ValBind x proc0)
 p18 = Var x (Var y (ValBind y proc1))
 p19 = Var x (Statement [ValBind x r4, Nop])
 p20 = Var a (Var y (ValBind y proc0))
+p21 = Var y (
+            Var x (
+                Statement [
+                    ValBind x l12,
+                    Conditional x (ValBind y l12) Nop 
+                ]
+            )
+    )
