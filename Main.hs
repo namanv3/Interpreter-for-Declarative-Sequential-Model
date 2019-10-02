@@ -43,6 +43,15 @@ runC stack store steps =
                                                                              where newStack = push (s2,env) (pop stack)
                                                               (Literal _) -> runC newStack store (steps - 1)
                                                                              where newStack = push (s1,env) (pop stack)
+       (Apply name inputs) -> if (freeIdentifiers (Apply name inputs) env) /= []
+                              then error "ID not in scope" else
+                              if (Map.member (varInEnv env name) (unbound store)) then error "ID not bound to a value" else
+                              if isProcedure (valueOf name env store) == False then error "ID refers to a non procedure value" else
+                              if length inputs /= numArgs (valueOf name env store) then error "number of args dont match" else
+                              runC newStack store (steps - 1)
+                              where proc = valueOf name env store
+                                    newEnv = foldl (\e p -> insertID e (fst p,varInEnv env (snd p))) (contextualEnv proc) (zip (allArgs proc) inputs)
+                                    newStack = push (stmtOfProc (valueOf name env store),newEnv) (pop stack)
        (Statement s) -> runC newStack store (steps - 1)
                         where newStack = (foldr (\p pes -> push (p,env) pes) (pop stack) s)
 
@@ -69,6 +78,8 @@ r4 = Record l13 [(l14,x)]
 
 proc0 = Proc [a, b, c] (ValBind a l12)
 proc1 = Proc [a, b, c] (VarBind a x)
+proc2 = Proc [a] (ValBind a l12)
+proc3 = Proc [a] (VarBind a x)
 
 p0  = Nop
 p1  = nopList 8
@@ -102,4 +113,35 @@ p21 = Var y (
                     Conditional x (ValBind y l12) Nop 
                 ]
             )
+    )
+p22 = Var y (
+            Statement [
+                ValBind y proc0,
+                Var x (
+                    Apply y [x]
+                )
+            ]
+    )
+p23 = Var y (
+            Statement [
+                ValBind y proc2,
+                Var x (
+                    Var z (
+                        Statement [
+                            Apply y [x],
+                            VarBind z x,
+                            Nop
+                        ]
+
+                    )
+                )
+            ]
+    )
+p24 = Var y (
+            Statement [
+                ValBind y proc3,
+                Var x (
+                    Apply y [x]
+                )
+            ]
     )

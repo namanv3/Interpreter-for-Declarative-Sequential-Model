@@ -13,7 +13,7 @@ data Value =  Nil
             | Record Value [(Value, Identifier)] -- but here, the values need to be Literals
             | RecordStore Value [(Value, Variable)] -- but here, the values need to be Literals
             | Proc [Identifier] Statement
-            | ProcStore [Identifier] Statement Environment 
+            | ProcStore [Identifier] Statement Environment
             deriving (Eq,Show)
 
 isSameValType :: Value -> Value -> Bool
@@ -40,11 +40,28 @@ data Statement =  Nop
                 | ValBind Identifier Value
                 | Conditional Identifier Statement Statement
                 | Statement [Statement]
+                | Apply Identifier [Identifier]
                 deriving(Eq,Show)
 
 isLiteral :: Value -> Bool
 isLiteral (Literal _) = True
 isLiteral _ = False
+
+isProcedure :: Value -> Bool
+isProcedure (ProcStore _ _ _) = True
+isProcedure _ = False
+
+numArgs :: Value -> Int
+numArgs (ProcStore args _ _) = length args
+
+allArgs :: Value -> [Identifier]
+allArgs (ProcStore args _ _) = args
+
+stmtOfProc :: Value -> Statement
+stmtOfProc (ProcStore _ stmt _) = stmt
+
+contextualEnv :: Value -> Environment
+contextualEnv (ProcStore _ _ ce) = ce
 
 checkValue :: Value -> Bool
 checkValue (Record (Literal _) vis) = (length (filter (\(v,i) -> isLiteral v) vis)) == (length vis)
@@ -165,6 +182,9 @@ adjoin env sas i =
         newEnv = Map.insert i var (mapIDVar env)
     in (Environment newEnv,snd vsPair)
 
+insertID :: Environment -> (Identifier,Variable) -> Environment
+insertID e p =  Environment (Map.insert (fst p) (snd p) (mapIDVar e))
+
 restrictEnv :: Environment -> [Identifier] -> Environment
 restrictEnv env idList = 
     let listEnv = Map.toList (mapIDVar env)
@@ -183,6 +203,10 @@ freeIdentifiers (Conditional i s1 s2) env =
     let allFree = (freeIdentifiers s1 env) ++ (freeIdentifiers s2 env)
         isIFree = idIsAbsent env i
     in allFree \\ if isIFree then [] else [i]
+freeIdentifiers (Apply name inputs) env = 
+    let listName = if idIsAbsent env name then [name] else []
+        listInps = filter (\input -> idIsAbsent env input) inputs
+    in listName ++ listInps
 freeIdentifiers (Statement s) env = foldl (\all s -> freeIdentifiers s env ++ all) [] s
 
 
@@ -195,7 +219,9 @@ convertToStore (Record name list) env =
 convertToStore (Proc parameters stmt) env =
     let allIds = freeIdentifiers stmt emptyEnv
         externalIds = allIds \\ parameters
-    in (ProcStore parameters stmt (restrictEnv env externalIds))
+        absentIDs = filter (\i -> idIsAbsent env i) externalIds
+        isNoError = absentIDs == []
+    in if isNoError then (ProcStore parameters stmt (restrictEnv env externalIds)) else error "Undeclared Identifiers in Proc"
 
 valueOf :: Identifier -> Environment -> SAS -> Value
 valueOf i env store = 
