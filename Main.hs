@@ -61,6 +61,7 @@ z = Ident "z"
 a = Ident "a"
 b = Ident "b"
 c = Ident "c"
+assign = Ident "assign"
 
 l0 = Literal 0
 l1 = Literal 1
@@ -80,6 +81,7 @@ proc0 = Proc [a, b, c] (ValBind a l12)
 proc1 = Proc [a, b, c] (VarBind a x)
 proc2 = Proc [a] (ValBind a l12)
 proc3 = Proc [a] (VarBind a x)
+proc4 = Proc [a,b] (VarBind a b)
 
 p0  = Nop
 p1  = nopList 8
@@ -138,10 +140,34 @@ p23 = Var y (
             ]
     )
 p24 = Var y (
-            Statement [
-                ValBind y proc3,
-                Var x (
-                    Apply y [x]
-                )
-            ]
+        Statement [
+            ValBind y proc3,
+            Var x (
+                Apply y [x]
+            )
+        ]
+    )
+p25 = Var assign (
+        Var x (
+            Var y (
+                Statement [
+                    ValBind assign proc4,
+                    Apply assign [x,y],
+                    Nop
+                ]
+            )
+        )
+    )
+p26 = Var assign (
+        Var x (
+            Var y (
+                Statement [
+                    ValBind assign proc4,
+                    ValBind x l12,
+                    ValBind y l13,
+                    Apply assign [x,y],
+                    Nop
+                ]
+            )
+        )
     )
