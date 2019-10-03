@@ -25,6 +25,11 @@ isSameValType (Proc _ _) (Proc _ _) = True
 isSameValType (ProcStore _ _ _) (ProcStore _ _ _) = True
 isSameValType _ _ = False
 
+recFeatures :: Value -> [(Value, Identifier)]
+recFeatures (Record _ f) = f
+
+recStoreFeatures :: Value -> [(Value, Variable)]
+recStoreFeatures (RecordStore _ f) = f
 
 data Variable = NoVariable
                 | Variable Int deriving (Eq, Ord, Show)
@@ -41,6 +46,7 @@ data Statement =  Nop
                 | Conditional Identifier Statement Statement
                 | Statement [Statement]
                 | Apply Identifier [Identifier]
+                | Match Identifier Value Statement Statement --- Value has to be a record
                 deriving(Eq,Show)
 
 isLiteral :: Value -> Bool
@@ -50,6 +56,20 @@ isLiteral _ = False
 isProcedure :: Value -> Bool
 isProcedure (ProcStore _ _ _) = True
 isProcedure _ = False
+
+isRecordSyntax :: Value -> Bool
+isRecordSyntax (Record _ _) = True
+isRecordSyntax _ = False
+
+isRecord :: Value -> Bool
+isRecord (RecordStore _ _) = True
+isRecord _ = False
+
+recordsMatch :: Value -> Value -> Bool
+recordsMatch (Record name1 list1) (Record name2 list2) = (name1 == name2) && (map fst list1 == map fst list2)
+recordsMatch (Record name1 list1) (RecordStore name2 list2) = (name1 == name2) && (map fst list1 == map fst list2)
+recordsMatch (RecordStore name1 list1) (Record name2 list2) = (name1 == name2) && (map fst list1 == map fst list2)
+recordsMatch (RecordStore name1 list1) (RecordStore name2 list2) = (name1 == name2) && (map fst list1 == map fst list2)
 
 numArgs :: Value -> Int
 numArgs (ProcStore args _ _) = length args
@@ -207,6 +227,11 @@ freeIdentifiers (Apply name inputs) env =
     let listName = if idIsAbsent env name then [name] else []
         listInps = filter (\input -> idIsAbsent env input) inputs
     in listName ++ listInps
+freeIdentifiers (Match i pattern s1 s2) env = 
+    let listI = if idIsAbsent env i then [i] else []
+        patternIDs = map snd (recFeatures pattern)
+        freeInS = freeIdentifiers s1 env ++ freeIdentifiers s2 env
+    in listI ++ (freeInS \\ patternIDs)
 freeIdentifiers (Statement s) env = foldl (\all s -> freeIdentifiers s env ++ all) [] s
 
 

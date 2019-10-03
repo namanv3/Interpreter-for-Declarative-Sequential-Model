@@ -52,6 +52,16 @@ runC stack store steps =
                               where proc = valueOf name env store
                                     newEnv = foldl (\e p -> insertID e (fst p,varInEnv env (snd p))) (contextualEnv proc) (zip (allArgs proc) inputs)
                                     newStack = push (stmtOfProc (valueOf name env store),newEnv) (pop stack)
+       (Match i pattern s1 s2) -> if (freeIdentifiers (Match i pattern s1 s2) env) /= []
+                                  then error "ID not in scope" else
+                                  if isRecord (valueOf i env store) == False  then error "ID refers to a non record value" else
+                                  if recordsMatch (valueOf i env store) pattern then
+                                  let newIDs = map snd (recFeatures pattern)
+                                      newVars = map snd (recStoreFeatures (valueOf i env store))
+                                      newEnv = foldl (\e p -> insertID e p) env (zip newIDs newVars)
+                                      newStack = push (s1,newEnv) (pop stack)
+                                  in runC newStack store (steps - 1)
+                                  else runC (push (s2,env) (pop stack)) store (steps - 1)
        (Statement s) -> runC newStack store (steps - 1)
                         where newStack = (foldr (\p pes -> push (p,env) pes) (pop stack) s)
 
@@ -61,6 +71,9 @@ z = Ident "z"
 a = Ident "a"
 b = Ident "b"
 c = Ident "c"
+p = Ident "p"
+q = Ident "q"
+r = Ident "r"
 assign = Ident "assign"
 
 l0 = Literal 0
@@ -168,6 +181,22 @@ p26 = Var assign (
                     Apply assign [x,y],
                     Nop
                 ]
+            )
+        )
+    )
+p27 = Var p (
+        Var q (
+            Var a (
+                Var b (
+                    Statement [
+                        ValBind q r0,
+                        Match q r1 (ValBind p l1) (ValBind p l2),
+                        Match q r1 (ValBind z l1) (ValBind c l2),
+                        -- Match q r3 (ValBind p l1) (ValBind c l2),   --- this will give an error
+                        Match q r3 (ValBind p l1) (ValBind b l2),
+                        Nop
+                    ]
+                )
             )
         )
     )
