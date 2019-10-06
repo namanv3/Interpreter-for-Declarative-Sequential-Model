@@ -62,6 +62,17 @@ runC stack store steps =
                                       newStack = push (s1,newEnv) (pop stack)
                                   in runC newStack store (steps - 1)
                                   else runC (push (s2,env) (pop stack)) store (steps - 1)
+       (Sum x y z) -> if (freeIdentifiers (Sum x y z) env) /= []
+                      then error "ID not in scope" else
+                      if (Map.member (varInEnv env x) (unbound store)) then error "ID not bound to a value" else
+                      if (Map.member (varInEnv env y) (unbound store)) then error "ID not bound to a value" else
+                      runC (pop stack) (bindVarVal store (varInEnv env z) (add x y store env)) (steps - 1)
+       (Product x y z) -> if (freeIdentifiers (Sum x y z) env) /= []
+                      then error "ID not in scope" else
+                      if (Map.member (varInEnv env x) (unbound store)) then error "ID not bound to a value" else
+                      if (Map.member (varInEnv env y) (unbound store)) then error "ID not bound to a value" else
+                      runC (pop stack) (bindVarVal store (varInEnv env z) (mult x y store env)) (steps - 1)
+
        (Statement s) -> runC newStack store (steps - 1)
                         where newStack = (foldr (\p pes -> push (p,env) pes) (pop stack) s)
 
@@ -200,3 +211,18 @@ p27 = Var p (
             )
         )
     )
+p28 = Var x (Var y (Var z (Statement [
+        ValBind x l12,
+        ValBind y l2,
+        Sum x y z
+    ])))
+p29 = Var x (Var y (Var z (Statement [
+        ValBind x l12,
+        ValBind y l2,
+        Product x y z
+    ])))
+p30 = Var x (Var y (Var z (Statement [
+        ValBind x l12,
+        ValBind y proc0,        --- error because adding a proc
+        Product x y z
+    ])))

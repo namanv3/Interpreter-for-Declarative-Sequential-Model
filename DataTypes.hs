@@ -9,7 +9,7 @@ instance Show Identifier where
     show (Ident x) = "Ident(" ++ x ++ ")"
 
 data Value =  Nil 
-            | Literal Int
+            | Literal {numvalue :: Int}
             | Record Value [(Value, Identifier)] -- but here, the values need to be Literals
             | RecordStore Value [(Value, Variable)] -- but here, the values need to be Literals
             | Proc [Identifier] Statement
@@ -47,6 +47,8 @@ data Statement =  Nop
                 | Statement [Statement]
                 | Apply Identifier [Identifier]
                 | Match Identifier Value Statement Statement --- Value has to be a record
+                | Sum Identifier Identifier Identifier
+                | Product Identifier Identifier Identifier
                 deriving(Eq,Show)
 
 isLiteral :: Value -> Bool
@@ -233,6 +235,8 @@ freeIdentifiers (Match i pattern s1 s2) env =
         freeInS = freeIdentifiers s1 env ++ freeIdentifiers s2 env
     in listI ++ (freeInS \\ patternIDs)
 freeIdentifiers (Statement s) env = foldl (\all s -> freeIdentifiers s env ++ all) [] s
+freeIdentifiers (Sum x y z) env = filter (\i -> idIsAbsent env i) [x,y,z]
+freeIdentifiers (Product x y z) env = filter (\i -> idIsAbsent env i) [x,y,z]
 
 
 convertToStore :: Value -> Environment -> Value
@@ -254,6 +258,20 @@ valueOf i env store =
     in case maybeVal of (Just v) -> v
 
 emptyEnv = Environment Map.empty
+
+add :: Identifier -> Identifier -> SAS -> Environment -> Value
+add x y store env = 
+    let valX = findValue store (varInEnv env x)
+        valY = findValue store (varInEnv env y)
+        isNoError = (isLiteral valX) && (isLiteral valY)
+    in if isNoError then Literal (numvalue valX + numvalue valY) else error "adding two non literals"
+
+mult :: Identifier -> Identifier -> SAS -> Environment -> Value
+mult x y store env = 
+    let valX = findValue store (varInEnv env x)
+        valY = findValue store (varInEnv env y)
+        isNoError = (isLiteral valX) && (isLiteral valY)
+    in if isNoError then Literal (numvalue valX * numvalue valY) else error "adding two non literals"
 
 -------------------------------------------------------------------------------------------------------------
 
