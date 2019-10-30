@@ -3,299 +3,39 @@ module DataTypes where
 import Data.List
 import qualified Data.Map as Map
 
-data Identifier = Ident String deriving (Eq,Ord)
-
-instance Show Identifier where
-    show (Ident x) = "Ident(" ++ x ++ ")"
-
-data Value =  Nil 
-            | Literal {numvalue :: Int}
-            | Record Value [(Value, Identifier)] -- but here, the values need to be Literals
-            | RecordStore Value [(Value, Variable)] -- but here, the values need to be Literals
-            | Proc [Identifier] Statement
-            | ProcStore [Identifier] Statement Environment
-            deriving (Eq,Show)
-
-isSameValType :: Value -> Value -> Bool
-isSameValType Nil Nil = True
-isSameValType (Literal _) (Literal _) = True
-isSameValType (Record _ _) (Record _ _) = True
-isSameValType (RecordStore _ _) (RecordStore _ _) = True
-isSameValType (Proc _ _) (Proc _ _) = True
-isSameValType (ProcStore _ _ _) (ProcStore _ _ _) = True
-isSameValType _ _ = False
-
-recFeatures :: Value -> [(Value, Identifier)]
-recFeatures (Record _ f) = f
-
-recStoreFeatures :: Value -> [(Value, Variable)]
-recStoreFeatures (RecordStore _ f) = f
-
-data Variable = NoVariable
-                | Variable Int deriving (Eq, Ord, Show)
-
-data EqClass = EqClass Int deriving (Eq, Show)
-
-newEqClass :: Variable -> EqClass
-newEqClass (Variable n) = (EqClass n)
-
 data Statement =  Nop
                 | Var Identifier Statement
                 | VarBind Identifier Identifier
                 | ValBind Identifier Value
                 | Conditional Identifier Statement Statement
-                | Statement [Statement]
                 | Apply Identifier [Identifier]
-                | Match Identifier Value Statement Statement --- Value has to be a record
-                | Sum Identifier Identifier Identifier
-                | Product Identifier Identifier Identifier
-                deriving(Eq,Show)
+                | Statement [Statement]
+                deriving(Eq)
 
-isLiteral :: Value -> Bool
-isLiteral (Literal _) = True
-isLiteral _ = False
+data Value =  Nil
+            | NumLiteral Int
+            | BoolLiteral Bool
+            | Proc [Identifier] Statement
+            | ProcStore [Identifier] Statement Environment
+            deriving (Eq)
 
-isProcedure :: Value -> Bool
-isProcedure (ProcStore _ _ _) = True
-isProcedure _ = False
+data Identifier = Ident String deriving (Eq)
 
-isRecordSyntax :: Value -> Bool
-isRecordSyntax (Record _ _) = True
-isRecordSyntax _ = False
-
-isRecord :: Value -> Bool
-isRecord (RecordStore _ _) = True
-isRecord _ = False
-
-recordsMatch :: Value -> Value -> Bool
-recordsMatch (Record name1 list1) (Record name2 list2) = (name1 == name2) && (map fst list1 == map fst list2)
-recordsMatch (Record name1 list1) (RecordStore name2 list2) = (name1 == name2) && (map fst list1 == map fst list2)
-recordsMatch (RecordStore name1 list1) (Record name2 list2) = (name1 == name2) && (map fst list1 == map fst list2)
-recordsMatch (RecordStore name1 list1) (RecordStore name2 list2) = (name1 == name2) && (map fst list1 == map fst list2)
-
-numArgs :: Value -> Int
-numArgs (ProcStore args _ _) = length args
-
-allArgs :: Value -> [Identifier]
-allArgs (ProcStore args _ _) = args
-
-stmtOfProc :: Value -> Statement
-stmtOfProc (ProcStore _ stmt _) = stmt
-
-contextualEnv :: Value -> Environment
-contextualEnv (ProcStore _ _ ce) = ce
-
-checkValue :: Value -> Bool
-checkValue (Record (Literal _) vis) = (length (filter (\(v,i) -> isLiteral v) vis)) == (length vis)
-checkValue (RecordStore (Literal _) vis) = (length (filter (\(v,i) -> isLiteral v) vis)) == (length vis)
-checkValue Nil = True
-checkValue (Literal _) = True
-checkValue (Proc _ _) = True
-checkValue (ProcStore _ _ _) = True
-checkValue _ = False
-
-nopList :: Int -> Statement
-nopList a = Statement (take a (cycle [Nop]))
-
-n :: Int
-n = 10 -- max size of SAS
-
-entryLabels :: [(Value,a)] -> [Value]                       -- works for both records and recordstores2
-entryLabels entries = foldr (\p ls-> (fst p):ls) [] entries
-
-entryVariables :: [(Value,Variable)] -> [Variable]
-entryVariables entries = foldr (\p ls-> (snd p):ls) [] entries
-
--------------------------------------------------------------------------------------------
-
-data SAS = SAS { bound   :: Map.Map Variable Value
-               , unbound :: Map.Map Variable EqClass
+data SAS = SAS { bound   :: [(Variable, Value)]
+               , unbound :: [(Variable, EqClass)]
                , unused  :: [Variable]
                }
 
-instance Show SAS where
-    show sas = "bound: " ++ (show (Map.toList (bound sas))) ++ "\nunbound: " ++ (show (Map.toList (unbound sas)))
+data Variable = Variable Int deriving (Eq, Ord)
 
-bindEqVal :: SAS -> EqClass -> Value -> SAS
-bindEqVal sas eq val = 
-    if checkValue val == False
-    then error "invalid Record value"
-    else let newBoundVars = Map.keys (Map.filter (== eq) (unbound sas))
-             newBoundMap  = foldl (\m var -> Map.insert var val m) (bound sas) newBoundVars
-         in (SAS newBoundMap (Map.filter (/= eq) (unbound sas)) (unused sas))
+data EqClass = EqClass Int deriving (Eq)
 
-bindEqEq :: SAS -> EqClass -> EqClass -> SAS
-bindEqEq sas e1 e2 = if e1 == e2 then sas else
-    let newE1Vars = Map.keys (Map.filter (== e2) (unbound sas))
-        restOfMap = Map.filter (/= e2) (unbound sas)
-        newUnbound = foldl (\m var -> Map.insert var e1 m) restOfMap newE1Vars
-    in (SAS (bound sas) newUnbound (unused sas))
+data Environment = Environment [(Identifier,Variable)] deriving(Eq)
 
-isUnbound :: SAS -> Variable -> Bool
-isUnbound sas var = Map.lookup var (bound sas) == Nothing
+data SemanticStack = SemanticStack [(Statement,Environment)]
 
-isbound :: SAS -> Variable -> Bool
-isbound sas var = Map.lookup var (unbound sas) == Nothing
+data MultiStack = MultiStack [SemanticStack]
 
-findEqClass :: SAS -> Variable -> EqClass
-findEqClass sas var = case (Map.lookup var (unbound sas)) of (Just e) -> e
+data SeqExecContext = SEC SemanticStack SAS
 
-findValue :: SAS -> Variable -> Value
-findValue sas var = case (Map.lookup var (bound sas)) of (Just v) -> v
-
-unify :: SAS -> Variable -> Variable -> SAS
-unify sas v1 v2
-    | isUnbound sas v1 && isUnbound sas v2 = bindEqEq sas (findEqClass sas v1) (findEqClass sas v2)
-    | isUnbound sas v1 = bindEqVal sas (findEqClass sas v1) (findValue sas v2)
-    | isUnbound sas v2 = bindEqVal sas (findEqClass sas v2) (findValue sas v1)
-
-unify sas v1 v2 =
-    let val1 = findValue sas v1
-        val2 = findValue sas v2
-    in if (isSameValType val1 val2)
-       then case (val1,val2)
-            of (RecordStore name1 entries1, RecordStore name2 entries2) -> (
-                    let labels1 = entryLabels entries1
-                        labels2 = entryLabels entries2
-                        tobeUnified = zip (entryVariables entries1) (entryVariables entries2)
-                    in if name1 /= name2 then error "Record entries not compatible"
-                       else if labels1 /= labels2 then error "Record entries not compatible"
-                       else foldl (\store p -> unify store (fst p) (snd p)) sas tobeUnified
-                )
-               (Literal a, Literal b) -> if a == b then sas else error "Both variables are already assigned different values"
-       else error "Different data types being matched"
-
-findNewVar :: SAS -> (Variable,SAS)
-findNewVar (SAS b ub un) = if length un == 0 then error "Max storage of SAS reached"
-                           else let newvar = head un
-                                    newlist = tail un
-                                    newubmap = Map.insert newvar (newEqClass newvar) ub
-                                in (newvar, (SAS b newubmap newlist))
-
-bindVarVar :: SAS -> Variable -> Variable -> SAS
-bindVarVar sas v1 v2 = unify sas v1 v2
-
-bindVarVal :: SAS -> Variable -> Value -> SAS
-bindVarVal sas var val
-    | isbound sas var = error ("variable " ++ (show var) ++ " already assigned a value")
-    | otherwise = let eq = case (Map.lookup var (unbound sas)) of (Just e) -> e
-                  in bindEqVal sas eq val
-
-emptySAS = (SAS Map.empty Map.empty (map Variable [1..n]))
-
--------------------------------------------------------------------------------------------------------------
-
-data Environment = Environment {mapIDVar :: Map.Map Identifier Variable} deriving(Eq)
-
-instance Show Environment where
-    show = show . (Map.toList) . mapIDVar
-
-idIsAbsent :: Environment -> Identifier -> Bool
-idIsAbsent env i = Map.lookup i (mapIDVar env) == Nothing
-
-varInEnv :: Environment -> Identifier -> Variable
-varInEnv env i = case (Map.lookup i (mapIDVar env)) of (Just v) -> v
-                                                       Nothing  -> error "Identifier out of scope"
-
-adjoin :: Environment -> SAS -> Identifier -> (Environment,SAS)
-adjoin env sas i =
-    let vsPair = findNewVar sas
-        var = fst vsPair
-        newEnv = Map.insert i var (mapIDVar env)
-    in (Environment newEnv,snd vsPair)
-
-insertID :: Environment -> (Identifier,Variable) -> Environment
-insertID e p =  Environment (Map.insert (fst p) (snd p) (mapIDVar e))
-
-restrictEnv :: Environment -> [Identifier] -> Environment
-restrictEnv env idList = 
-    let listEnv = Map.toList (mapIDVar env)
-        selected = filter (\pair -> fst pair `elem` idList) listEnv
-    in Environment $ Map.fromList selected
-
-freeIdentifiers :: Statement -> Environment -> [Identifier]
-freeIdentifiers Nop env = []
-freeIdentifiers (Var id stmt) env = filter (/= id) (freeIdentifiers stmt env)
-freeIdentifiers (VarBind i j) env = 
-    let listI = if idIsAbsent env i then [i] else []
-        listJ = if idIsAbsent env j then [j] else []
-    in listI ++ listJ
-freeIdentifiers (ValBind i _) env = if idIsAbsent env i then [i] else []
-freeIdentifiers (Conditional i s1 s2) env = 
-    let allFree = (freeIdentifiers s1 env) ++ (freeIdentifiers s2 env)
-        isIFree = idIsAbsent env i
-    in allFree \\ if isIFree then [] else [i]
-freeIdentifiers (Apply name inputs) env = 
-    let listName = if idIsAbsent env name then [name] else []
-        listInps = filter (\input -> idIsAbsent env input) inputs
-    in listName ++ listInps
-freeIdentifiers (Match i pattern s1 s2) env = 
-    let listI = if idIsAbsent env i then [i] else []
-        patternIDs = map snd (recFeatures pattern)
-        freeInS = freeIdentifiers s1 env ++ freeIdentifiers s2 env
-    in listI ++ (freeInS \\ patternIDs)
-freeIdentifiers (Statement s) env = foldl (\all s -> freeIdentifiers s env ++ all) [] s
-freeIdentifiers (Sum x y z) env = filter (\i -> idIsAbsent env i) [x,y,z]
-freeIdentifiers (Product x y z) env = filter (\i -> idIsAbsent env i) [x,y,z]
-
-
-convertToStore :: Value -> Environment -> Value
-convertToStore (Record name list) env = 
-    let absentIDs = filter (\pair -> idIsAbsent env (snd pair)) list
-        isNoError = absentIDs == []
-        featVarPairs = map (\pair -> (fst pair, varInEnv env (snd pair))) list
-    in if isNoError then (RecordStore name featVarPairs) else error "Undeclared Identifiers in Record"
-convertToStore (Proc parameters stmt) env =
-    let allIds = freeIdentifiers stmt emptyEnv
-        externalIds = allIds \\ parameters
-        absentIDs = filter (\i -> idIsAbsent env i) externalIds
-        isNoError = absentIDs == []
-    in if isNoError then (ProcStore parameters stmt (restrictEnv env externalIds)) else error "Undeclared Identifiers in Proc"
-
-valueOf :: Identifier -> Environment -> SAS -> Value
-valueOf i env store = 
-    let maybeVal = Map.lookup (varInEnv env i) (bound store)
-    in case maybeVal of (Just v) -> v
-
-emptyEnv = Environment Map.empty
-
-add :: Identifier -> Identifier -> SAS -> Environment -> Value
-add x y store env = 
-    let valX = findValue store (varInEnv env x)
-        valY = findValue store (varInEnv env y)
-        isNoError = (isLiteral valX) && (isLiteral valY)
-    in if isNoError then Literal (numvalue valX + numvalue valY) else error "adding two non literals"
-
-mult :: Identifier -> Identifier -> SAS -> Environment -> Value
-mult x y store env = 
-    let valX = findValue store (varInEnv env x)
-        valY = findValue store (varInEnv env y)
-        isNoError = (isLiteral valX) && (isLiteral valY)
-    in if isNoError then Literal (numvalue valX * numvalue valY) else error "adding two non literals"
-
--------------------------------------------------------------------------------------------------------------
-
-data SStack = SStack {execStack :: [(Statement,Environment)]}
-
-instance Show SStack where
-    show (SStack ses) = 
-        let endWithNL = map ((++ "\n") . show) ses
-        in foldl (++) "" endWithNL
-
-pop :: SStack -> SStack
-pop (SStack s) =  SStack (tail s)
-
-top :: SStack -> (Statement,Environment)
-top (SStack s) = head s
-
-push :: (Statement,Environment) -> SStack -> SStack
-push p (SStack s) = SStack (p:s)
-
-currStmt :: SStack -> Statement
-currStmt s = fst (top s)
-
-startStack :: Statement -> SStack
-startStack program = SStack [(program,emptyEnv)]
-
-isEmpty :: SStack -> Bool
-isEmpty (SStack s) = (length s) == 0
+data ConExecContext = CEC MultiStack SAS
