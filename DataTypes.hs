@@ -10,7 +10,7 @@ data Statement =  Nop
                 | Conditional Identifier Statement Statement
                 | Apply Identifier [Identifier]
                 | Statement [Statement]
-                deriving(Eq)
+                deriving(Eq,Show)
 
 data Value =  Nil
             | NumLiteral Int
@@ -19,24 +19,53 @@ data Value =  Nil
             | ProcStore [Identifier] Statement Environment
             deriving (Eq)
 
+instance Show Value where
+    show Nil = "Nil"
+    show (NumLiteral i)  = "Num("  ++ show i ++ ")"
+    show (BoolLiteral i) = "Bool(" ++ show i ++ ")"
+    show _ = ""
+
 data Identifier = Ident String deriving (Eq)
+
+instance Show Identifier where
+    show (Ident x) = "Ident(" ++ x ++ ")"
 
 data SAS = SAS { bound   :: [(Variable, Value)]
                , unbound :: [(Variable, EqClass)]
                , unused  :: [Variable]
                }
 
+instance Show SAS where
+    show sas = "bound:\n" ++ b ++ "\nunbound:\n" ++ ub
+               where b  = foldl (\str pair-> str ++ show (fst pair) ++ " = " ++ show (snd pair) ++ "\n") "" (bound sas)
+                     ub = foldl (\str pair-> str ++ show (fst pair) ++ " : " ++ show (snd pair) ++ "\n") "" (unbound sas)
+
 data Variable = Variable Int deriving (Eq, Ord)
+
+instance Show Variable where
+    show (Variable x) = "Var(" ++ show x ++ ")"
 
 data EqClass = EqClass Int deriving (Eq)
 
+instance Show EqClass where
+    show (EqClass x) = "Eq(" ++ show  x ++ ")"
+
 data Environment = Environment [(Identifier,Variable)] deriving(Eq)
 
+instance Show Environment where
+    show (Environment e) = foldl (\str pair-> str ++ show (fst pair) ++ " : " ++ show (snd pair) ++ "\n") "" e
+
 data SemanticStack = SemanticStack [(Statement,Environment)]
+
+instance Show SemanticStack where
+    show (SemanticStack s) = foldl (\str p-> str ++ "(\n" ++ show (fst p) ++ "\n" ++ show (snd p) ++ ")\n") "" s
 
 data MultiStack = MultiStack [SemanticStack]
 
 data SeqExecContext = SEC {currStack::SemanticStack, currStore::SAS}
+
+instance Show SeqExecContext where
+    show (SEC stack store) = (show stack) ++ "\n\n" ++ (show store)
 
 data ConExecContext = CEC MultiStack SAS
 
@@ -84,7 +113,7 @@ bindVarVar v1 v2 store = unify v1 v2 store
 bindVarVal :: Variable -> Value -> SAS -> SAS
 bindVarVal var val store = if isUnbound var store then bindEqVal (findEqClass var store) val store else 
                            if (valueOf var store) == val then store
-                           else error "Variable bound to a different value"
+                           else error (show var ++ " bound to a different value")
 
 bindEqVal :: EqClass -> Value -> SAS -> SAS
 bindEqVal eq val store = 
@@ -120,7 +149,7 @@ isBoolean x env store = isBooleanValue (valueOfID x env store)
 emptyEnv = Environment []
 
 addMapping :: Identifier -> Variable -> Environment -> Environment
-addMapping x var (Environment e) = Environment ((x,var):e)
+addMapping x var (Environment e) = Environment ((x,var):(filter (\p -> (fst p) /= x) e))
 
 varOfID :: Identifier -> Environment -> Variable
 varOfID x (Environment e) = snd (head (filter (\pair -> (fst pair) == x) e))
