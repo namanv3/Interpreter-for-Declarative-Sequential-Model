@@ -35,5 +35,25 @@ runC context steps = if (noThreadsLeft context || steps == 0) then context
                                 then error (show x ++ " not a boolean") else
                                 runC (evaluateConditionalC x s1 s2 context) (steps - 1)
 
+        Apply func inputs ->if (rmdups (freeIdentifiers (Apply func inputs) currEnv)) /= []
+                            then error "ID not in scope" else
+                            if (isUnbound (varOfID func currEnv) store)
+                            then runC (switchThread context) (steps - 1) else
+                            if (isProc func currEnv store) == False
+                            then error (show func ++ " not a proc") else
+                            runC (applyProc func inputs context) (steps - 1)
+
         Statement s ->  runC (updateMStack newStack context) (steps - 1)
                         where newStack = (foldr (\p pes -> push (p,currEnv) pes) (pop stack) s)
+
+
+
+
+
+
+
+
+
+
+
+

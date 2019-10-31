@@ -336,7 +336,7 @@ evaluateConditional x s1 s2 stack store =
     then SEC (push (s1,currEnv stack) (pop stack)) store
     else SEC (push (s2,currEnv stack) (pop stack)) store
 
-pushProc :: Identifier -> [Identifier] ->SemanticStack -> SAS -> SeqExecContext
+pushProc :: Identifier -> [Identifier] -> SemanticStack -> SAS -> SeqExecContext
 pushProc procName inputs stack store = 
     let env = currEnv stack
         proc = valueOfID procName env store
@@ -419,7 +419,14 @@ evaluateConditionalC x s1 s2 (CEC mstack store) =
         then updateMStack (push (s1,currEnv stack) (pop stack)) (CEC mstack store)
         else updateMStack (push (s2,currEnv stack) (pop stack)) (CEC mstack store)
 
-
+applyProc :: Identifier -> [Identifier] -> ConExecContext -> ConExecContext
+applyProc procName inputs (CEC mstack store) =
+    let thread = chooseStack mstack
+        env = currEnv thread
+        proc = valueOfID procName env store
+        parameters = paramList proc
+        newEnv = foldl (\e p -> addMapping (fst p) (varOfID (snd p) env) e) (contextualEnv proc) (zip parameters inputs)
+    in updateMStack (push (procstmt proc,newEnv) (pop thread)) (CEC mstack store)
 
 
 
