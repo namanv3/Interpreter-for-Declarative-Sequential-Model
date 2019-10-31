@@ -105,3 +105,62 @@ prog4 =
             ]
         )
     )
+
+proc0 = Proc [x,y,z] (Statement [ValBind x l1,VarBind y z,ValBind z l2])
+
+prog5 = 
+    Var x (
+        Statement [
+            ValBind x proc0,
+            Nop
+        ]
+    )
+
+proc1 = Proc [x] (VarBind x y)
+
+prog6 = 
+    Var y (
+        Var a (
+            Statement [
+                Var y (
+                    Statement [
+                        ValBind y l10,
+                        ValBind a proc1
+                    ]
+                ),
+                Apply a [y],
+                Nop
+            ]
+        )
+    )
+
+prog7 = 
+    Var x (
+        Var y (
+            Var a (
+                Statement [
+                    ValBind y l100,
+                    Var y (
+                        Statement [
+                            ValBind y l10,
+                            ValBind a proc1
+                        ]
+                    ),
+                    Apply a [x],
+                    ValBind y l100,
+                    Nop
+                ]
+            )
+        )
+    )
+
+
+
+
+
+
+
+
+
+
+

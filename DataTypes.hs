@@ -3,6 +3,12 @@ module DataTypes where
 import Data.List
 import qualified Data.Map as Map
 
+rmdups :: Eq a => [a] -> [a]
+rmdups [] = []
+rmdups (x:xs)   | x `elem` xs   = rmdups xs
+                | otherwise     = x : rmdups xs
+------------------------------------------------------------------------------------
+
 data Statement =  Nop
                 | Var Identifier Statement
                 | VarBind Identifier Identifier
@@ -16,14 +22,16 @@ data Value =  Nil
             | NumLiteral Int
             | BoolLiteral Bool
             | Proc [Identifier] Statement
-            | ProcStore [Identifier] Statement Environment
+            | ProcStore {paramList::[Identifier], procstmt::Statement, contextualEnv::Environment}
             deriving (Eq)
 
 instance Show Value where
     show Nil = "Nil"
     show (NumLiteral i)  = "Num("  ++ show i ++ ")"
     show (BoolLiteral i) = "Bool(" ++ show i ++ ")"
-    show _ = ""
+    show (Proc parameters stmt) = "--Proc " ++ show parameters ++ " _ --"
+    show (ProcStore parameters stmt (Environment e)) = "ProcStore " ++ show parameters ++ " _ " ++ eee
+                                           where eee =  (foldl (\str pair-> str ++ show (fst pair) ++ " : " ++ show (snd pair) ++ ",") "{" e) ++ "}"
 
 data Identifier = Ident String deriving (Eq)
 
@@ -72,6 +80,24 @@ data ConExecContext = CEC MultiStack SAS
 ---------------------------------------------------------------------------------------------------
 -- Statement functions
 
+freeIdentifiers :: Statement -> Environment -> [Identifier]
+freeIdentifiers Nop env = []
+freeIdentifiers (Var id stmt) env = filter (/= id) (freeIdentifiers stmt env)
+freeIdentifiers (VarBind i j) env = 
+    let listI = if isAbsent i env then [i] else []
+        listJ = if isAbsent j env then [j] else []
+    in listI ++ listJ
+freeIdentifiers (ValBind i _) env = if isAbsent i env then [i] else []
+freeIdentifiers (Conditional i s1 s2) env = 
+    let allFree = (freeIdentifiers s1 env) ++ (freeIdentifiers s2 env)
+        isIFree = isAbsent i env
+    in allFree \\ if isIFree then [] else [i]
+freeIdentifiers (Apply name inputs) env = 
+    let listName = if isAbsent name env then [name] else []
+        listInps = filter (\input -> isAbsent input env) inputs
+    in listName ++ listInps
+freeIdentifiers (Statement s) env = foldl (\all s -> freeIdentifiers s env ++ all) [] s
+
 ---------------------------------------------------------------------------------------------------
 -- Value functions
 
@@ -79,8 +105,18 @@ isBooleanValue :: Value -> Bool
 isBooleanValue (BoolLiteral _) = True
 isBooleanValue v = False
 
----------------------------------------------------------------------------------------------------
--- ID functions
+isProcValue :: Value -> Bool
+isProcValue (ProcStore _ _ _) = True
+isProcValue v = False
+
+convertToStore :: Value -> Environment -> Value 
+convertToStore (Proc parameters stmt) env = 
+    let allIds = rmdups (freeIdentifiers stmt emptyEnv)
+        externalIds = allIds \\ parameters
+        absentIds = filter (\i -> isAbsent i env) externalIds
+        noError = absentIds == []
+    in if noError then (ProcStore parameters stmt (restrictEnv externalIds env)) 
+       else error ("All: " ++ show allIds ++ ". externalIds: " ++ show externalIds ++ ".")
 
 ---------------------------------------------------------------------------------------------------
 -- SAS functions
@@ -110,8 +146,14 @@ bindIDs x y env store = bindVarVar (varOfID x env) (varOfID y env) store
 bindVarVar :: Variable -> Variable -> SAS -> SAS
 bindVarVar v1 v2 store = unify v1 v2 store
 
-bindVarVal :: Variable -> Value -> SAS -> SAS
-bindVarVal var val store = if isUnbound var store then bindEqVal (findEqClass var store) val store else 
+bindVarVal :: Variable -> Value -> Environment -> SAS -> SAS
+bindVarVal var (Proc parameters stmt) env store = 
+    if isUnbound var store then bindEqVal (findEqClass var store) val store else 
+    if (valueOf var store) == val then store
+    else error (show var ++ " bound to a different value")
+    where val = convertToStore (Proc parameters stmt) env
+
+bindVarVal var val _ store = if isUnbound var store then bindEqVal (findEqClass var store) val store else 
                            if (valueOf var store) == val then store
                            else error (show var ++ " bound to a different value")
 
@@ -143,6 +185,9 @@ unify v1 v2 store =
 isBoolean :: Identifier -> Environment -> SAS -> Bool
 isBoolean x env store = isBooleanValue (valueOfID x env store)
 
+isProc :: Identifier -> Environment -> SAS -> Bool
+isProc x env store = isProcValue (valueOfID x env store)
+
 ---------------------------------------------------------------------------------------------------
 -- Environment functions
 
@@ -167,6 +212,9 @@ adjoin x env store =
 
 isAbsent :: Identifier -> Environment -> Bool
 isAbsent x (Environment e) = (filter (\pair -> (fst pair) == x) e) == []
+
+restrictEnv :: [Identifier] -> Environment -> Environment
+restrictEnv list (Environment e) = Environment $ filter (\pair -> fst pair `elem` list) e
 
 ---------------------------------------------------------------------------------------------------
 -- SemanticStack functions
@@ -213,6 +261,13 @@ evaluateConditional x s1 s2 stack store =
     then SEC (push (s1,currEnv stack) (pop stack)) store
     else SEC (push (s2,currEnv stack) (pop stack)) store
 
+pushProc :: Identifier -> [Identifier] ->SemanticStack -> SAS -> SeqExecContext
+pushProc procName inputs stack store = 
+    let env = currEnv stack
+        proc = valueOfID procName env store
+        parameters = paramList proc
+        newEnv = foldl (\e p-> addMapping (fst p) (varOfID (snd p) env) e) (contextualEnv proc) (zip parameters inputs)
+    in SEC (push (procstmt proc,newEnv) (pop stack)) store
 
 
 

@@ -20,7 +20,7 @@ run currExecContext steps = if (isTerminated currExecContext || steps == 0) then
                        else run (SEC (pop stack) (bindIDs x y currEnv store)) (steps - 1)
         ValBind x val -> if (isAbsent x currEnv)
                        then error (show x ++ " not in scope")
-                       else run (SEC (pop stack) (bindVarVal var val store)) (steps - 1)
+                       else run (SEC (pop stack) (bindVarVal var val currEnv store)) (steps - 1)
                             where var = varOfID x currEnv
         Conditional x s1 s2 -> if (isAbsent x currEnv)
                                then error (show x ++ " not in scope") else
@@ -29,5 +29,12 @@ run currExecContext steps = if (isTerminated currExecContext || steps == 0) then
                                if (isBoolean x currEnv store) == False
                                then error (show x ++ " not a boolean") else
                                run (evaluateConditional x s1 s2 stack store) (steps - 1)
+        Apply func inputs -> if (rmdups (freeIdentifiers (Apply func inputs) currEnv)) /= []
+                             then error "ID not in scope" else
+                             if (isUnbound (varOfID func currEnv) store)
+                             then error (show func ++ " not bound to a value") else
+                             if (isProc func currEnv store) == False
+                             then error (show func ++ " not a proc") else
+                             run (pushProc func inputs stack store) (steps - 1)
         Statement s -> run (SEC newStack store) (steps - 1)
                        where newStack = (foldr (\p pes -> push (p,currEnv) pes) (pop stack) s)
