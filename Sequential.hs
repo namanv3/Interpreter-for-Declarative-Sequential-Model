@@ -41,5 +41,23 @@ run currExecContext steps = if (isTerminated currExecContext || steps == 0) then
                                  if (isRecordValue (valueOfID x currEnv store)) == False
                                  then error (show x ++ " not a record") else
                                  run (patternMatch x pattern s1 s2 stack store) (steps - 1)
+        Sum x y z -> if (isAbsent x currEnv) || (isAbsent y currEnv) || (isAbsent z currEnv)
+                     then error ("One out of" ++ show [x,y,z] ++ "not in scope") else
+                     if isUnbound (varOfID x currEnv) store || isUnbound (varOfID x currEnv) store
+                     then error ("One out of" ++ show [x,y] ++ "is unbound") else
+                     run (SEC (pop stack) (bindVarVal (varOfID z currEnv) (add x y store currEnv) currEnv store)) (steps - 1)
+        Product x y z -> if (isAbsent x currEnv) || (isAbsent y currEnv) || (isAbsent z currEnv)
+                         then error ("One out of" ++ show [x,y,z] ++ "not in scope") else
+                         if isUnbound (varOfID x currEnv) store || isUnbound (varOfID x currEnv) store
+                         then error ("One out of" ++ show [x,y] ++ "is unbound") else
+                         run (SEC (pop stack) (bindVarVal (varOfID z currEnv) (multiply x y store currEnv) currEnv store)) (steps - 1)
         Statement s -> run (SEC newStack store) (steps - 1)
                        where newStack = (foldr (\p pes -> push (p,currEnv) pes) (pop stack) s)
+
+
+
+
+
+
+
+

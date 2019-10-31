@@ -280,14 +280,59 @@ prog13 =
         ]
     )
 
+prog14 =
+    Var a (
+        Var b (
+            Var c (
+                Statement [
+                    ValBind a l100,
+                    ValBind b l200,
+                    Product a b c,
+                    Nop
+                ]
+            )
+        )
+    )
 
+square = Proc [a,b] $ Product a a b
 
+hypotenuse = Proc [a,b,c] $ Var x (
+                                Var y (
+                                    Var s (
+                                        Statement [
+                                            ValBind s square,
+                                            Apply s [a,x],
+                                            Apply s [b,y],
+                                            Sum x y c
+                                        ]
+                                    )
+                                )
+                            )
 
+prog15 = 
+    Var x (
+        Var y (
+            Var z (
+                Var r (
+                    Statement [
+                        ValBind x l10,
+                        ValBind y l4,
+                        ValBind r hypotenuse,
+                        Apply r [x,y,z],
+                        Nop
+                    ]
+                )
+            )
+        )
+    )
 
-
-
-
-
+prog16 =
+    Var x (
+        Statement [
+            ValBind x l0,
+            Conditional x Nop Nop
+        ]
+    )
 
 
 

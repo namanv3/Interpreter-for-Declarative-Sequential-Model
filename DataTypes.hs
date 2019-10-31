@@ -16,11 +16,13 @@ data Statement =  Nop
                 | Conditional Identifier Statement Statement
                 | Apply Identifier [Identifier]
                 | Match Identifier Value Statement Statement
+                | Sum Identifier Identifier Identifier
+                | Product Identifier Identifier Identifier
                 | Statement [Statement]
                 deriving(Eq,Show)
 
 data Value =  Nil
-            | NumLiteral Int
+            | NumLiteral {numvalue::Int}
             | BoolLiteral Bool
             | Proc [Identifier] Statement
             | ProcStore {paramList::[Identifier], procstmt::Statement, contextualEnv::Environment}
@@ -107,6 +109,8 @@ freeIdentifiers (Match x pattern s1 s2) env =
         s1Free = rmdups ((freeIdentifiers s1 env) \\ patternIDs)
         s2Free = freeIdentifiers s2 env
     in rmdups (listX ++ s1Free ++ s2Free)
+freeIdentifiers (Sum x y z) env = rmdups (filter (\i -> isAbsent i env) [x,y,z])
+freeIdentifiers (Product x y z) env = rmdups (filter (\i -> isAbsent i env) [x,y,z])
 freeIdentifiers (Statement s) env = rmdups (foldl (\all s -> freeIdentifiers s env ++ all) [] s)
 
 ---------------------------------------------------------------------------------------------------
@@ -114,7 +118,11 @@ freeIdentifiers (Statement s) env = rmdups (foldl (\all s -> freeIdentifiers s e
 
 isBooleanValue :: Value -> Bool
 isBooleanValue (BoolLiteral _) = True
-isBooleanValue v = False
+isBooleanValue _ = False
+
+isNumValue :: Value -> Bool
+isNumValue (NumLiteral _) = True
+isNumValue _ = False
 
 isRecordValue :: Value -> Bool
 isRecordValue (RecordStore _ _) = True
@@ -138,6 +146,20 @@ convertToStore (Record name features) env =
         isNoError = absentIDs == []
         featVarPairs = map (\pair -> (fst pair, varOfID (snd pair) env)) features
     in if isNoError then (RecordStore name featVarPairs) else error "Undeclared Identifiers in Record"
+
+add :: Identifier -> Identifier -> SAS -> Environment -> Value
+add x y store env = 
+    let valX = valueOfID x env store
+        valY = valueOfID y env store
+        isNoError = (isNumValue valX) && (isNumValue valY)
+    in if isNoError then NumLiteral (numvalue valX + numvalue valY) else error "adding two non literals"
+
+multiply :: Identifier -> Identifier -> SAS -> Environment -> Value
+multiply x y store env = 
+    let valX = valueOfID x env store
+        valY = valueOfID y env store
+        isNoError = (isNumValue valX) && (isNumValue valY)
+    in if isNoError then NumLiteral (numvalue valX * numvalue valY) else error "multiplying two non literals"
 
 ---------------------------------------------------------------------------------------------------
 -- SAS functions
