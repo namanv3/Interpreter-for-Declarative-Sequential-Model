@@ -11,6 +11,11 @@ b = Ident "b"
 c = Ident "c"
 d = Ident "d"
 
+p = Ident "p"
+q = Ident "q"
+r = Ident "r"
+s = Ident "s"
+
 l0 = NumLiteral 0
 l1 = NumLiteral 1
 l2 = NumLiteral 2
@@ -153,6 +158,56 @@ prog7 =
             )
         )
     )
+
+proc2 = Proc [x] $ Statement [ValBind x l10, ValBind y (Proc [c] Nop), Nop]
+
+prog8 = 
+    Var a (
+        Var b (
+            Var y (
+                Statement [
+                    ValBind a proc2,
+                    Apply a [b],
+                    Nop
+                ]
+            )
+        )
+    )
+
+proc3 = Proc [x,y,z] (Statement [ValBind x l1,VarBind y z,ValBind z l2, VarBind a z])
+
+prog9 = 
+    Var a (
+        Var b (
+            Var c (
+                Var d (
+                    Var p (
+                        Statement [
+                            ValBind p proc3,
+                            Apply p [b,c,d],
+                            Nop
+                        ]
+                    )
+                )
+            )
+        )
+    )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
