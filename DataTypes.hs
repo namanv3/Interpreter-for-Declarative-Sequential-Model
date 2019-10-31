@@ -77,12 +77,18 @@ instance Show SemanticStack where
 
 data MultiStack = MultiStack [SemanticStack]
 
+instance Show MultiStack where
+    show (MultiStack ss) = foldl (\str s-> str ++ "\n" ++ show s) "" ss
+
 data SeqExecContext = SEC {currStack::SemanticStack, currStore::SAS}
 
 instance Show SeqExecContext where
     show (SEC stack store) = (show stack) ++ "\n\n" ++ (show store)
 
 data ConExecContext = CEC MultiStack SAS
+
+instance Show SeqExecContext where
+    show (SEC stacks store) = (show stacks) ++ "\n\n" ++ (show store)
 
 ---------------------------------------------------------------------------------------------------
 -- Statement functions
@@ -347,10 +353,11 @@ patternMatch x pattern s1 s2 stack store =
     in if matching then SEC (push (s1,newEnv) (pop stack)) store
        else SEC (push (s2,env) (pop stack)) store
 
+---------------------------------------------------------------------------------------------------
+-- MultiStack functions
 
-
-
-
+---------------------------------------------------------------------------------------------------
+-- ConExecContext functions
 
 
 
