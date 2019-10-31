@@ -1,5 +1,6 @@
 import DataTypes
 import Sequential
+import Concurrent
 
 w = Ident "w"
 x = Ident "x"
@@ -61,7 +62,7 @@ prog1 =
                     ]
                 ),
                 VarBind x y,
-                ValBind x l10
+                ValBind x l20
             ]
         )
     )

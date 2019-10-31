@@ -70,7 +70,7 @@ data Environment = Environment [(Identifier,Variable)] deriving(Eq)
 instance Show Environment where
     show (Environment e) = foldl (\str pair-> str ++ show (fst pair) ++ " : " ++ show (snd pair) ++ "\n") "" e
 
-data SemanticStack = SemanticStack [(Statement,Environment)]
+data SemanticStack = SemanticStack [(Statement,Environment)] deriving(Eq)
 
 instance Show SemanticStack where
     show (SemanticStack s) = foldl (\str p-> str ++ "(\n" ++ show (fst p) ++ "\n" ++ show (snd p) ++ ")\n") "" s
@@ -87,8 +87,8 @@ instance Show SeqExecContext where
 
 data ConExecContext = CEC MultiStack SAS
 
-instance Show SeqExecContext where
-    show (SEC stacks store) = (show stacks) ++ "\n\n" ++ (show store)
+instance Show ConExecContext where
+    show (CEC stacks store) = (show stacks) ++ "\n\n" ++ (show store)
 
 ---------------------------------------------------------------------------------------------------
 -- Statement functions
@@ -118,6 +118,9 @@ freeIdentifiers (Match x pattern s1 s2) env =
 freeIdentifiers (Sum x y z) env = rmdups (filter (\i -> isAbsent i env) [x,y,z])
 freeIdentifiers (Product x y z) env = rmdups (filter (\i -> isAbsent i env) [x,y,z])
 freeIdentifiers (Statement s) env = rmdups (foldl (\all s -> freeIdentifiers s env ++ all) [] s)
+
+scope :: Statement -> Statement
+scope (Var x s) = s
 
 ---------------------------------------------------------------------------------------------------
 -- Value functions
@@ -356,8 +359,78 @@ patternMatch x pattern s1 s2 stack store =
 ---------------------------------------------------------------------------------------------------
 -- MultiStack functions
 
+newMStack :: Statement -> MultiStack
+newMStack program = MultiStack [newStack program]
+
+noStacksLeft :: MultiStack -> Bool
+noStacksLeft (MultiStack stacks) = (filter (\stack -> (isEmpty stack) == False) stacks) == []
+
+chooseStack :: MultiStack -> SemanticStack
+chooseStack (MultiStack stacks) = head (filter (\stack -> (isEmpty stack) == False) stacks)
+
+updateCurrStack :: SemanticStack -> MultiStack -> MultiStack
+updateCurrStack newStack (MultiStack stacks) = MultiStack (newStack:(tail (filter (\stack -> (isEmpty stack) == False) stacks)))
+
+reschedule :: MultiStack -> MultiStack
+reschedule (MultiStack stacks) = 
+    let nonEmptyStacks = (filter (\stack -> (isEmpty stack) == False) stacks)
+        runningThread = head nonEmptyStacks
+        isNoError = (length nonEmptyStacks) > 1
+    in if isNoError then MultiStack $ ((tail nonEmptyStacks) ++ [runningThread])
+        else error "No other thread to choose"
+
 ---------------------------------------------------------------------------------------------------
 -- ConExecContext functions
+
+conInitiate :: Statement -> ConExecContext
+conInitiate program = CEC (newMStack program) emptyStore
+
+noThreadsLeft :: ConExecContext -> Bool
+noThreadsLeft (CEC mstack _) = noStacksLeft mstack
+
+chooseThread :: ConExecContext -> SemanticStack
+chooseThread (CEC mstack _) = chooseStack mstack
+
+getStore :: ConExecContext -> SAS
+getStore (CEC _ store) = store
+
+updateMStack :: SemanticStack -> ConExecContext -> ConExecContext
+updateMStack newStack (CEC mstack store) = CEC (updateCurrStack newStack mstack) store
+
+updateStore :: SAS -> ConExecContext -> ConExecContext
+updateStore newStore (CEC mstack store) = CEC mstack newStore
+
+addID :: Identifier -> ConExecContext -> ConExecContext
+addID x (CEC mstack store) = 
+    let thread = chooseStack mstack
+        env = currEnv thread
+        res = adjoin x env store
+        newStore = snd res
+        newStack = push (scope (currStmt thread),fst res) (pop thread)
+    in updateMStack newStack (updateStore newStore (CEC mstack store))
+
+switchThread :: ConExecContext -> ConExecContext
+switchThread (CEC mstack store) = CEC (reschedule mstack) store
+
+evaluateConditionalC :: Identifier -> Statement -> Statement -> ConExecContext -> ConExecContext
+evaluateConditionalC x s1 s2 (CEC mstack store) = 
+    let stack = chooseStack mstack
+    in  if (valueOfID x (currEnv stack) store) == (BoolLiteral True)
+        then updateMStack (push (s1,currEnv stack) (pop stack)) (CEC mstack store)
+        else updateMStack (push (s2,currEnv stack) (pop stack)) (CEC mstack store)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
