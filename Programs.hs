@@ -24,6 +24,9 @@ l4 = NumLiteral 4
 
 l10  = NumLiteral 10
 l20  = NumLiteral 20
+l30  = NumLiteral 30
+l40  = NumLiteral 40
+l50  = NumLiteral 50
 l100 = NumLiteral 100
 l200 = NumLiteral 200
 
@@ -194,15 +197,88 @@ prog9 =
     )
 
 
+rec1 = Record l1 [(l10,a), (l20,b)]
+rec2 = Record l1 [(l10,y), (l20,a)]
+rec3 = Record l1 [(l20,y), (l30,a)]
+rec4 = Record l1 [(l10,y), (l20,z)]
 
+prog10 = 
+    Var a (
+        Var b (
+            Var x (
+                Var y (
+                    Statement [
+                        ValBind x rec1,
+                        VarBind a y,
+                        Var z (
+                            Statement [
+                                ValBind z rec2,
+                                VarBind x z
+                            ]
+                        )
+                    ]
+                )
+            )
+        )
+    )
 
+prog11 = 
+    Var a (
+        Var b (
+            Var x (
+                Var y (
+                    Statement [
+                        ValBind x rec1,
+                        VarBind a y,
+                        Var z (
+                            Statement [
+                                ValBind z rec3,
+                                VarBind x z
+                            ]
+                        )
+                    ]
+                )
+            )
+        )
+    )
 
+prog12 = 
+    Var a (
+        Var b (
+            Var x (
+                Statement [
+                    ValBind x rec1,
+                    Match x rec4 (ValBind y l0) (ValBind b l1)
+                ]
+            )
+        )
+    )
 
+proc4 = Proc [x] $ Var y (
+                    Statement [
+                        ValBind y l0,
+                        Match x rec1 (ValBind a l1) Nop,
+                        Match x rec1 (VarBind b y) Nop
+                    ]
+                )
 
-
-
-
-
+prog13 = 
+    Var a (
+        Statement [
+            ValBind a proc4,
+            Var x (
+                Var y (
+                    Var z (
+                        Statement [
+                            ValBind x rec4,
+                            Apply a [x],
+                            Nop           
+                        ]
+                    )
+                )
+            )
+        ]
+    )
 
 
 

@@ -15,6 +15,7 @@ data Statement =  Nop
                 | ValBind Identifier Value
                 | Conditional Identifier Statement Statement
                 | Apply Identifier [Identifier]
+                | Match Identifier Value Statement Statement
                 | Statement [Statement]
                 deriving(Eq,Show)
 
@@ -23,15 +24,19 @@ data Value =  Nil
             | BoolLiteral Bool
             | Proc [Identifier] Statement
             | ProcStore {paramList::[Identifier], procstmt::Statement, contextualEnv::Environment}
+            | Record {recordName::Value, recordFeatures::[(Value, Identifier)]} -- but here, the values need to be Literals
+            | RecordStore {recName::Value, recFeatures::[(Value, Variable)]} -- but here, the values need to be Literals
             deriving (Eq)
 
 instance Show Value where
     show Nil = "Nil"
     show (NumLiteral i)  = "Num("  ++ show i ++ ")"
     show (BoolLiteral i) = "Bool(" ++ show i ++ ")"
-    show (Proc parameters stmt) = "--Proc " ++ show parameters ++ " _ --"
+    show (Proc parameters stmt) = "--Proc " ++ show parameters ++ "--"
     show (ProcStore parameters stmt (Environment e)) = "ProcStore " ++ show parameters ++ " _ " ++ eee
                                            where eee =  (foldl (\str pair-> str ++ show (fst pair) ++ " : " ++ show (snd pair) ++ ",") "{" e) ++ "}"
+    show (Record name features) = "Rec(" ++ show name ++ ")" ++ show features
+    show (RecordStore name features) = "RecStore(" ++ show name ++ ")" ++ show features
 
 data Identifier = Ident String deriving (Eq)
 
@@ -82,21 +87,27 @@ data ConExecContext = CEC MultiStack SAS
 
 freeIdentifiers :: Statement -> Environment -> [Identifier]
 freeIdentifiers Nop env = []
-freeIdentifiers (Var id stmt) env = filter (/= id) (freeIdentifiers stmt env)
+freeIdentifiers (Var id stmt) env = rmdups (filter (/= id) (freeIdentifiers stmt env))
 freeIdentifiers (VarBind i j) env = 
     let listI = if isAbsent i env then [i] else []
         listJ = if isAbsent j env then [j] else []
-    in listI ++ listJ
+    in rmdups (listI ++ listJ)
 freeIdentifiers (ValBind i _) env = if isAbsent i env then [i] else []
 freeIdentifiers (Conditional i s1 s2) env = 
-    let allFree = (freeIdentifiers s1 env) ++ (freeIdentifiers s2 env)
+    let allFree = rmdups ((freeIdentifiers s1 env) ++ (freeIdentifiers s2 env))
         isIFree = isAbsent i env
-    in allFree \\ if isIFree then [] else [i]
+    in rmdups (allFree \\ if isIFree then [] else [i])
 freeIdentifiers (Apply name inputs) env = 
     let listName = if isAbsent name env then [name] else []
         listInps = filter (\input -> isAbsent input env) inputs
-    in listName ++ listInps
-freeIdentifiers (Statement s) env = foldl (\all s -> freeIdentifiers s env ++ all) [] s
+    in rmdups (listName ++ listInps)
+freeIdentifiers (Match x pattern s1 s2) env =
+    let listX = if isAbsent x env then [x] else []
+        patternIDs = map snd (recordFeatures pattern)
+        s1Free = rmdups ((freeIdentifiers s1 env) \\ patternIDs)
+        s2Free = freeIdentifiers s2 env
+    in rmdups (listX ++ s1Free ++ s2Free)
+freeIdentifiers (Statement s) env = rmdups (foldl (\all s -> freeIdentifiers s env ++ all) [] s)
 
 ---------------------------------------------------------------------------------------------------
 -- Value functions
@@ -104,6 +115,10 @@ freeIdentifiers (Statement s) env = foldl (\all s -> freeIdentifiers s env ++ al
 isBooleanValue :: Value -> Bool
 isBooleanValue (BoolLiteral _) = True
 isBooleanValue v = False
+
+isRecordValue :: Value -> Bool
+isRecordValue (RecordStore _ _) = True
+isRecordValue _ = False
 
 isProcValue :: Value -> Bool
 isProcValue (ProcStore _ _ _) = True
@@ -117,6 +132,12 @@ convertToStore (Proc parameters stmt) env =
         noError = absentIds == []
     in if noError then (ProcStore parameters stmt (restrictEnv externalIds env)) 
        else error ("All: " ++ show allIds ++ ". externalIds: " ++ show externalIds ++ ".")
+
+convertToStore (Record name features) env = 
+    let absentIDs = filter (\pair -> isAbsent (snd pair) env) features
+        isNoError = absentIDs == []
+        featVarPairs = map (\pair -> (fst pair, varOfID (snd pair) env)) features
+    in if isNoError then (RecordStore name featVarPairs) else error "Undeclared Identifiers in Record"
 
 ---------------------------------------------------------------------------------------------------
 -- SAS functions
@@ -153,6 +174,12 @@ bindVarVal var (Proc parameters stmt) env store =
     else error (show var ++ " bound to a different value")
     where val = convertToStore (Proc parameters stmt) env
 
+bindVarVal var (Record name features) env store = 
+    if isUnbound var store then bindEqVal (findEqClass var store) val store else 
+    if (valueOf var store) == val then store
+    else error (show var ++ " bound to a different value")
+    where val = convertToStore (Record name features) env
+
 bindVarVal var val _ store = if isUnbound var store then bindEqVal (findEqClass var store) val store else 
                            if (valueOf var store) == val then store
                            else error (show var ++ " bound to a different value")
@@ -180,13 +207,30 @@ unify v1 v2 store
 unify v1 v2 store = 
     let val1 = valueOf v1 store
         val2 = valueOf v2 store
-    in if val1 == val2 then store else error "Different values being equated"
+    in case (val1,val2)
+       of (NumLiteral _, NumLiteral _)   -> if val1 == val2 then store else error "Vars assigned different values"
+          (BoolLiteral _, BoolLiteral _) -> if val1 == val2 then store else error "Vars assigned different values"
+          (ProcStore _ _ _, ProcStore _ _ _) -> if val1 == val2 then store else error "Vars assigned different values"
+          (RecordStore _ _, RecordStore _ _) -> bindRecords val1 val2 store
+          (_,_) -> error "Different data types being equated"
 
 isBoolean :: Identifier -> Environment -> SAS -> Bool
 isBoolean x env store = isBooleanValue (valueOfID x env store)
 
 isProc :: Identifier -> Environment -> SAS -> Bool
 isProc x env store = isProcValue (valueOfID x env store)
+
+bindRecords :: Value -> Value -> SAS -> SAS
+bindRecords v1 v2 store = 
+    let name1 = recName v1
+        name2 = recName v2
+        f1 = recFeatures v1
+        f2 = recFeatures v2
+        labels1 = map fst f1
+        labels2 = map fst f2
+    in if name1 /= name2 then error "Records dont have same name" else
+       if labels1 /= labels2 then error (show labels1 ++ " not equal to" ++ show labels2)
+       else foldl (\s p -> unify (fst p) (snd p) s) store (zip (map snd f1) (map snd f2))
 
 ---------------------------------------------------------------------------------------------------
 -- Environment functions
@@ -266,10 +310,20 @@ pushProc procName inputs stack store =
     let env = currEnv stack
         proc = valueOfID procName env store
         parameters = paramList proc
-        newEnv = foldl (\e p-> addMapping (fst p) (varOfID (snd p) env) e) (contextualEnv proc) (zip parameters inputs)
+        newEnv = foldl (\e p -> addMapping (fst p) (varOfID (snd p) env) e) (contextualEnv proc) (zip parameters inputs)
     in SEC (push (procstmt proc,newEnv) (pop stack)) store
 
-
+patternMatch :: Identifier -> Value -> Statement -> Statement -> SemanticStack -> SAS -> SeqExecContext
+patternMatch x pattern s1 s2 stack store = 
+    let env = currEnv stack
+        xRecord = valueOfID x env store
+        labels1 = map fst (recFeatures xRecord)
+        labels2 = map fst (recordFeatures pattern)
+        idPattern = map snd (recordFeatures pattern)
+        matching = (recName xRecord == recordName pattern) && (labels1 == labels2)
+        newEnv = foldl (\e p -> addMapping (fst p) (snd p) e) env (zip idPattern (map snd (recFeatures xRecord)))
+    in if matching then SEC (push (s1,newEnv) (pop stack)) store
+       else SEC (push (s2,env) (pop stack)) store
 
 
 

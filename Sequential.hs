@@ -36,5 +36,10 @@ run currExecContext steps = if (isTerminated currExecContext || steps == 0) then
                              if (isProc func currEnv store) == False
                              then error (show func ++ " not a proc") else
                              run (pushProc func inputs stack store) (steps - 1)
+        Match x pattern s1 s2 -> if isAbsent x currEnv
+                                 then error (show x ++ " not in scope") else
+                                 if (isRecordValue (valueOfID x currEnv store)) == False
+                                 then error (show x ++ " not a record") else
+                                 run (patternMatch x pattern s1 s2 stack store) (steps - 1)
         Statement s -> run (SEC newStack store) (steps - 1)
                        where newStack = (foldr (\p pes -> push (p,currEnv) pes) (pop stack) s)
