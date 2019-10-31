@@ -43,6 +43,28 @@ runC context steps = if (noThreadsLeft context || steps == 0) then context
                             then error (show func ++ " not a proc") else
                             runC (applyProc func inputs context) (steps - 1)
 
+        Match x pattern s1 s2 ->if isAbsent x currEnv
+                                then error (show x ++ " not in scope") else
+                                if (isUnbound (varOfID x currEnv) store)
+                                then runC (switchThread context) (steps - 1) else
+                                if (isRecordValue (valueOfID x currEnv store)) == False
+                                then error (show x ++ " not a record") else
+                                runC (patternMatchC x pattern s1 s2 context) (steps - 1)
+
+        Sum x y z ->    if (isAbsent x currEnv) || (isAbsent y currEnv) || (isAbsent z currEnv)
+                        then error ("One out of" ++ show [x,y,z] ++ "not in scope") else
+                        if isUnbound (varOfID x currEnv) store || isUnbound (varOfID x currEnv) store
+                        then runC (switchThread context) (steps - 1) else
+                        runC (updateMStack (pop stack) (updateStore (bindVarVal (varOfID z currEnv) (add x y store currEnv) currEnv store) context)) (steps - 1)
+
+        Product x y z ->if (isAbsent x currEnv) || (isAbsent y currEnv) || (isAbsent z currEnv)
+                        then error ("One out of" ++ show [x,y,z] ++ "not in scope") else
+                        if isUnbound (varOfID x currEnv) store || isUnbound (varOfID x currEnv) store
+                        then runC (switchThread context) (steps - 1) else
+                        runC (updateMStack (pop stack) (updateStore (bindVarVal (varOfID z currEnv) (multiply x y store currEnv) currEnv store) context)) (steps - 1)
+
+        Thread s -> runC (addThread (s,currEnv) (updateMStack (pop stack) context)) (steps - 1)
+
         Statement s ->  runC (updateMStack newStack context) (steps - 1)
                         where newStack = (foldr (\p pes -> push (p,currEnv) pes) (pop stack) s)
 

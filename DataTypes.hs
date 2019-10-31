@@ -18,6 +18,7 @@ data Statement =  Nop
                 | Match Identifier Value Statement Statement
                 | Sum Identifier Identifier Identifier
                 | Product Identifier Identifier Identifier
+                | Thread Statement
                 | Statement [Statement]
                 deriving(Eq,Show)
 
@@ -117,6 +118,7 @@ freeIdentifiers (Match x pattern s1 s2) env =
     in rmdups (listX ++ s1Free ++ s2Free)
 freeIdentifiers (Sum x y z) env = rmdups (filter (\i -> isAbsent i env) [x,y,z])
 freeIdentifiers (Product x y z) env = rmdups (filter (\i -> isAbsent i env) [x,y,z])
+freeIdentifiers (Thread s) env = rmdups (freeIdentifiers s env) 
 freeIdentifiers (Statement s) env = rmdups (foldl (\all s -> freeIdentifiers s env ++ all) [] s)
 
 scope :: Statement -> Statement
@@ -379,6 +381,9 @@ reschedule (MultiStack stacks) =
     in if isNoError then MultiStack $ ((tail nonEmptyStacks) ++ [runningThread])
         else error "No other thread to choose"
 
+addStack :: (Statement,Environment) -> MultiStack -> MultiStack
+addStack stmtEnv (MultiStack stacks) = MultiStack $ (SemanticStack [stmtEnv]):stacks
+
 ---------------------------------------------------------------------------------------------------
 -- ConExecContext functions
 
@@ -427,6 +432,22 @@ applyProc procName inputs (CEC mstack store) =
         parameters = paramList proc
         newEnv = foldl (\e p -> addMapping (fst p) (varOfID (snd p) env) e) (contextualEnv proc) (zip parameters inputs)
     in updateMStack (push (procstmt proc,newEnv) (pop thread)) (CEC mstack store)
+
+patternMatchC ::  Identifier -> Value -> Statement -> Statement -> ConExecContext -> ConExecContext
+patternMatchC x pattern s1 s2 (CEC mstack store) =
+    let stack = chooseStack mstack
+        env = currEnv stack
+        xRecord = valueOfID x env store
+        labels1 = map fst (recFeatures xRecord)
+        labels2 = map fst (recordFeatures pattern)
+        idPattern = map snd (recordFeatures pattern)
+        matching = (recName xRecord == recordName pattern) && (labels1 == labels2)
+        newEnv = foldl (\e p -> addMapping (fst p) (snd p) e) env (zip idPattern (map snd (recFeatures xRecord)))
+    in  if matching then updateMStack (push (s1,newEnv) (pop stack)) (CEC mstack store)
+        else updateMStack (push (s2,env) (pop stack)) (CEC mstack store)
+
+addThread :: (Statement,Environment) -> ConExecContext -> ConExecContext
+addThread stmtEnv (CEC mstack store) = CEC (addStack stmtEnv mstack) store
 
 
 

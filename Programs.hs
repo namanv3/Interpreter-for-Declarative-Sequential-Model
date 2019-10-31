@@ -22,6 +22,7 @@ l1 = NumLiteral 1
 l2 = NumLiteral 2
 l3 = NumLiteral 3
 l4 = NumLiteral 4
+l5 = NumLiteral 5
 
 l10  = NumLiteral 10
 l20  = NumLiteral 20
@@ -334,6 +335,62 @@ prog16 =
             Conditional x Nop Nop
         ]
     )
+
+prog17 = 
+    Var x (
+        Var y (
+            Statement [
+                Thread Nop,
+                Thread (ValBind y l10),
+                ValBind x l10
+            ]
+        )
+    )
+
+prog18 = 
+    Var x (
+        Var y (
+            Var z (
+                Var s (
+                    Statement [
+                        Thread (Apply s [x,y]),
+                        ValBind x l20,
+                        ValBind s square
+                    ]
+                )
+            )
+        )
+    )
+
+prog19 = 
+    Var x (
+        Var y (
+            Var z (
+                Var s (
+                    Statement [
+                        Thread (Apply s [x,y]),
+                        Thread (Conditional z (ValBind x l20) (ValBind y l30)),
+                        ValBind x l20,
+                        ValBind s square,
+                        ValBind z true
+                    ]
+                )
+            )
+        )
+    )
+
+prog20 = 
+    Var x (
+        Statement [
+            Thread (ValBind x l10),
+            ValBind x l20
+        ]
+    )
+
+
+
+
+
 
 
 
