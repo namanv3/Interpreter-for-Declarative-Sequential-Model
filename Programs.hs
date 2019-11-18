@@ -388,7 +388,49 @@ prog20 =
     )
 
 
+s1 = Ident "s1"
+s2 = Ident "s2"
+one = Ident "one"
+two = Ident "two"
+three = Ident "three"
 
+prog21 = 
+    Var one ( Var two (Var three (Var s1 ( Var s2 ( Var a ( Statement [
+        ValBind one l1,
+        ValBind two l2,
+        ValBind three l3,
+        ValBind a l10,
+        Thread (
+            Var b (
+                Statement [
+                    Sum a one b,
+                    Conditional s1 Nop (Statement [Nop,Nop])
+                ]
+            )
+        ),
+        Thread (
+            Var c (
+                Statement [
+                    Sum a two c,
+                    Conditional s2 Nop (Statement [Nop,Nop]),
+                    ValBind s1 true
+                ]
+            )
+        ),
+        Var a (
+            Statement [
+                ValBind a l100,
+                Thread (
+                    Var d (
+                        Statement [
+                            Sum a three d,
+                            ValBind s2 false
+                        ]
+                    )
+                )
+            ]
+        )
+    ]))))))
 
 
 
